@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Decentralised data storage</title>
+  <style> 
+    :root {
+      --bg: #0b1020; --fg: #e8eefc; --muted: #9fb0d8; --card: #121833;
+      --accent: #6aa1ff; --accent-2: #4dd4b0; --border: #27335a; --danger: #ff6b6b;
+    }
+    *{box-sizing:border-box} html,body{height:100%}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:var(--fg);
+         background:linear-gradient(120deg,#0b1020,#0e1327 50%,#0b1020)}
+    .container{max-width:1100px;margin:0 auto;padding:24px}
+    h1{font-size:36px;line-height:1.1;margin:0 0 8px;font-weight:800}
+    h2{font-size:18px;color:var(--muted);margin:0 0 8px;font-weight:700}
+    .grid{display:grid;gap:16px;grid-template-columns:repeat(12,1fr);align-items:start}
+    .col-6{grid-column:span 6} .col-4{grid-column:span 4} .col-12{grid-column:span 12}
+    @media (max-width:900px){.col-6,.col-4{grid-column:span 12}}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;
+          box-shadow:0 10px 30px rgba(0,0,0,.25)}
+    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    .stack{display:grid;gap:10px}
+    .muted{color:var(--muted);font-size:14px}
+    .chip{display:inline-flex;align-items:center;gap:8px;background:#0c1430;border:1px solid var(--border);
+          color:#bcd0ff;padding:10px 14px;border-radius:14px;font-weight:700}
+    .hero{display:grid;gap:16px;margin-bottom:12px}
+    .pill{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:14px;
+          padding:12px 14px;background:#0c1430}
+    .btn{
+      background:linear-gradient(45deg,var(--accent),var(--accent-2));color:#07122b;border:none;
+      padding:12px 16px;border-radius:14px;font-weight:800;cursor:pointer;
+      transition:transform .12s ease,filter .2s ease;outline:none;font-size:16px
+    }
+    .btn:hover{transform:translateY(-1px);filter:brightness(1.05)} .btn:disabled{opacity:.6;cursor:not-allowed}
+    .btn-ghost{background:#0c1430;color:var(--fg);border:1px solid var(--border)}
+    .btn-danger{background:var(--danger);color:#fff;border:none}
+    input[type="file"], textarea{
+      width:100%;background:#0c1430;color:var(--fg);border:1px solid var(--border);border-radius:12px;
+      padding:10px;outline:none
+    }
+    textarea::placeholder{color:#5f6f9c}
+    .divider{height:1px;background:var(--border);margin:14px 0;opacity:.7}
+    .error{color:#fff;background:#2a0f16;border:1px solid #6b1b2a;padding:10px;border-radius:10px}
+    #imageDisplay,.stored-image{width:100%;max-width:440px;display:block;border:1px solid var(--border);
+      border-radius:14px;padding:4px;background:#0c1430;margin-top:8px}
+    video, audio{width:100%;border:1px solid var(--border);border-radius:14px;background:#0c1430;margin-top:8px}
+    .stored-text{margin-top:8px;padding:10px;border:1px solid var(--border);border-radius:12px;background:#0c1430;white-space:pre-wrap}
+    .items-grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(240px,1fr))}
+    .notice{font-size:12px;color:#b8c6f0;background:#0c1430;border:1px dashed var(--border);padding:8px 10px;border-radius:10px}
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/web3@1.10.4/dist/web3.min.js"></script>
+</head>
+<body>
+  <div class="container">
+    <!-- HERO -->
+    <div class="card hero">
+      <div>
+        <div style="font-size:40px;font-weight:900">Decentralised<br/>data storage</div>
+        <div class="row" style="margin-top:10px">
+          <div class="pill">🖼️ Image</div>
+          <div class="pill">▶️ Video</div>
+          <div class="pill">📄 Document</div>
+          <div class="pill">🎵 Audio</div>
+        </div>
+      </div>
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <div id="connState" class="chip">◻️ Not connected</div>
+        <div class="row">
+          <button id="connectWallet" class="btn">Connect to wallet</button>
+          <a id="dlMeta" class="btn btn-ghost" href="https://metamask.io/download/" target="_blank" rel="noopener">🦊 Download</a>
+          <a id="dlOKX" class="btn btn-ghost" href="https://www.okx.com/web3" target="_blank" rel="noopener">⭕ OKX</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- MAIN APP -->
+    <div class="grid">
+      <div class="card col-6">
+        <h2>Latest Uploaded Item</h2>
+        <div id="latestArea" class="muted">Nothing yet.</div>
+      </div>
+      <div class="card col-6">
+        <h2>Account / Network</h2>
+        <div id="walletAddress" class="muted"></div>
+        <div id="networkChip" class="muted"></div>
+        <div class="divider"></div>
+        <div class="notice">
+          <strong>Security tip:</strong> Don’t expose API keys in frontend for production. Use a backend or JWT.
+        </div>
+      </div>
+
+      <!-- Uploaders -->
+      <div class="card col-4"><h2>Upload Image</h2><div class="stack"><input type="file" id="imgInput" accept="image/*" /><button class="btn" id="upImage">Upload Image</button><div id="imgError" class="error" style="display:none"></div></div></div>
+      <div class="card col-4"><h2>Upload Video</h2><div class="stack"><input type="file" id="vidInput" accept="video/*" /><button class="btn" id="upVideo">Upload Video</button><div id="vidError" class="error" style="display:none"></div></div></div>
+      <div class="card col-4"><h2>Upload Audio</h2><div class="stack"><input type="file" id="audInput" accept="audio/*" /><button class="btn" id="upAudio">Upload Audio</button><div id="audError" class="error" style="display:none"></div></div></div>
+      <div class="card col-6"><h2>Upload Document</h2><div class="stack"><input type="file" id="docInput" /><button class="btn" id="upDoc">Upload Document</button><div id="docError" class="error" style="display:none"></div></div></div>
+      <div class="card col-6"><h2>Store Text Message</h2><div class="stack"><textarea id="textInput" rows="4" placeholder="Enter your message here..."></textarea><button class="btn" id="upText">Upload Text</button><div id="textError" class="error" style="display:none"></div></div></div>
+
+      <div class="card col-12">
+        <div class="row" style="justify-content: space-between; align-items: end;">
+          <h2>Stored Items</h2>
+          <button id="viewBtn" class="btn btn-ghost">View Stored Items</button>
+        </div>
+        <div id="storedItems" class="items-grid" style="min-height:40px;"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+// ========================= CONFIG =========================
+const contractAddress = "0x1322c06d436654f34cf0d2d1b793cfcd8119759a";
+const contractABI = [
+  { "inputs":[{"internalType":"string","name":"_cid","type":"string"}], "name":"uploadImage", "outputs":[], "stateMutability":"nonpayable", "type":"function" },
+  { "inputs":[{"internalType":"uint256","name":"_id","type":"uint256"}], "name":"getImage", "outputs":[{"internalType":"string","name":"","type":"string"}], "stateMutability":"view", "type":"function" },
+  { "inputs":[], "name":"imageCount", "outputs":[{"internalType":"uint256","name":"","type":"uint256"}], "stateMutability":"view", "type":"function" },
+  { "inputs":[{"internalType":"uint256","name":"_id","type":"uint256"}], "name":"deleteImage", "outputs":[], "stateMutability":"nonpayable", "type":"function" }
+];
+
+// PINATA KEYS (demo)
+const PINATA_API_KEY = "30d2d7cfbf6204b6ee0f";
+const PINATA_SECRET  = "699aef360df3d641ee180234b659f18b72c08e05fb1984ce1137bce12c30d20c";
+
+// ========================= STATE =========================
+let web3, userAccount, contract, providerName = null;
+const $ = (id)=>document.getElementById(id);
+const setConn = (txt)=> { $("connState").textContent = txt; };
+const showErr = (id,msg)=> { const b=$(id); b.textContent=msg; b.style.display='block'; setTimeout(()=>b.style.display='none',6000); };
+
+function ensureConnected(){ if(!web3||!userAccount) throw new Error('Please connect wallet first.'); if(!contract) throw new Error('Contract not initialized.'); }
+async function initContract(){ contract = new web3.eth.Contract(contractABI, contractAddress); }
+
+// ========================= WALLET CONNECT =========================
+async function connectWallet(){
+  const provider = window.ethereum;
+  if(!provider){ alert("No wallet found!"); return; }
+  try{
+    const accounts = await provider.request({ method:'eth_requestAccounts' });
+    userAccount = accounts?.[0];
+    web3 = new Web3(provider);
+    await initContract();
+    $("walletAddress").textContent = `Connected: ${userAccount}`;
+    setConn('✅ Connected');
+  }catch(err){ showErr('imgError','Wallet connection failed.'); }
+}
+async function connectIfNeeded(){ if(!web3||!userAccount) await connectWallet(); }
+
+// ========================= PINATA =========================
+async function pinFileToIPFS(file){
+  const fd = new FormData(); fd.append('file', file);
+  const res = await fetch('https://api.pinata.cloud/pinning/pinFileToIPFS',{method:'POST',headers:{'pinata_api_key':PINATA_API_KEY,'pinata_secret_api_key':PINATA_SECRET},body:fd});
+  const data = await res.json(); if(!res.ok) throw new Error('Upload failed'); return data.IpfsHash;
+}
+async function pinJSONToIPFS(obj){
+  const res = await fetch('https://api.pinata.cloud/pinning/pinJSONToIPFS',{method:'POST',headers:{'Content-Type':'application/json','pinata_api_key':PINATA_API_KEY,'pinata_secret_api_key':PINATA_SECRET},body:JSON.stringify(obj)});
+  const data = await res.json(); if(!res.ok) throw new Error('Upload failed'); return data.IpfsHash;
+}
+
+// ========================= CONTRACT =========================
+async function storeCID(cid){ ensureConnected(); return contract.methods.uploadImage(cid).send({ from:userAccount }); }
+async function deleteCID(id){ ensureConnected(); return contract.methods.deleteImage(id).send({ from:userAccount }); }
+
+// ========================= HELPERS =========================
+function fileUrlFromCID(cid){ return `https://gateway.pinata.cloud/ipfs/${cid}`; }
+function escapeHtml(s){ return s.replace(/[&<>"]+/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+// ========================= UI =========================
+async function handleGenericFile(inputId, errId){
+  const inp = $(inputId); if(!inp.files.length) return alert("Choose file first");
+  try{
+    await connectIfNeeded();
+    const file = inp.files[0];
+    const cid = await pinFileToIPFS(file);
+    await storeCID(cid);
+    alert("Stored successfully!"); inp.value='';
+  }catch(e){ showErr(errId,e.message); }
+}
+async function handleTextUpload(){
+  const text=$("textInput").value.trim(); if(!text) return alert("Enter text");
+  try{
+    await connectIfNeeded(); const cid=await pinJSONToIPFS({message:text}); await storeCID(cid);
+    alert("Stored successfully!"); $("textInput").value='';
+  }catch(e){ showErr('textError',e.message); }
+}
+
+async function handleViewItems(){
+  try{
+    await connectIfNeeded();
+    const wrap=$("storedItems"); wrap.innerHTML="Loading...";
+    const count=await contract.methods.imageCount().call(); const nodes=[];
+    for(let i=0;i<count;i++){
+      const cid=await contract.methods.getImage(i).call(); if(!cid) continue;
+      const url=fileUrlFromCID(cid);
+      nodes.push(cardHtml(`<div class="muted">${cid.slice(0,20)}...</div>`,url,i));
+    }
+    wrap.innerHTML = nodes.length?nodes.join(""):"No items.";
+  }catch(err){ alert(err.message); }
+}
+
+function cardHtml(inner,url,i){
+  return `
+    <div class="card" style="padding:10px;text-align:center">
+      ${inner}
+      <div class="row" style="margin-top:8px;justify-content:center;gap:8px">
+        <button class="btn btn-ghost" onclick="saveFile('${url}','item_${i}')">Save</button>
+        <button class="btn btn-ghost" onclick="shareItem('${url}')">Share</button>
+        <button class="btn btn-danger" onclick="deleteItem(${i})">Delete</button>
+      </div>
+    </div>
+  `;
+}
+
+// Extra helpers
+function saveFile(url,filename){ const a=document.createElement('a');a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove(); }
+async function shareItem(url){ if(navigator.share) try{await navigator.share({title:"Shared item",url});}catch{} else alert("Sharing not supported."); }
+async function deleteItem(id){ if(confirm("Delete this item?")){ try{await deleteCID(id); alert("Deleted"); handleViewItems();}catch(e){alert("Delete failed: "+e.message);} } }
+
+// ========================= EVENTS =========================
+document.addEventListener('DOMContentLoaded',()=>{
+  $("connectWallet").addEventListener('click', connectWallet);
+  $("upImage").addEventListener('click', ()=>handleGenericFile('imgInput','imgError'));
+  $("upVideo").addEventListener('click', ()=>handleGenericFile('vidInput','vidError'));
+  $("upAudio").addEventListener('click', ()=>handleGenericFile('audInput','audError'));
+  $("upDoc").addEventListener('click', ()=>handleGenericFile('docInput','docError'));
+  $("upText").addEventListener('click', handleTextUpload);
+  $("viewBtn").addEventListener('click', handleViewItems);
+});
+</script>
+</body>
+</html>
